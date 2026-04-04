@@ -1,0 +1,182 @@
+<style>
+  .phase-dot { width:10px;height:10px;border-radius:50%;background:var(--color-border-secondary);flex-shrink:0;transition:background .25s; }
+  .phase-dot.done { background:#1D9E75; }
+  .phase-dot.active { background:#534AB7; }
+  .task-row { display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:0.5px solid var(--color-border-tertiary);font-size:13px;color:var(--color-text-secondary); }
+  .task-row:last-child { border-bottom:none; }
+  .task-num { width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;flex-shrink:0;margin-top:1px; }
+  .tag { display:inline-block;font-size:11px;font-weight:500;padding:2px 8px;border-radius:4px;margin-right:4px; }
+  .tag-py { background:var(--color-background-info);color:var(--color-text-info); }
+  .tag-ml { background:#EEEDFE;color:#3C3489; }
+  .tag-fl { background:#E1F5EE;color:#085041; }
+  .tag-doc { background:var(--color-background-secondary);color:var(--color-text-secondary); }
+  .nav-btn { cursor:pointer;padding:8px 20px;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);background:transparent;color:var(--color-text-primary);font-size:13px;transition:background .15s; }
+  .nav-btn:hover { background:var(--color-background-secondary); }
+  .nav-btn:disabled { opacity:.3;cursor:default; }
+  .deliverable-box { background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:10px 14px;margin-top:12px;font-size:13px;color:var(--color-text-secondary);border-left:3px solid #534AB7; }
+</style>
+
+<div style="padding:1rem 0;">
+
+<div style="display:flex;align-items:center;gap:8px;margin-bottom:1.5rem;flex-wrap:wrap;" id="dot-row"></div>
+
+<div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:1.25rem;" id="phase-card"></div>
+
+<div style="display:flex;justify-content:space-between;align-items:center;margin-top:1rem;">
+  <button class="nav-btn" id="prev-btn" onclick="go(-1)">← Prev</button>
+  <span style="font-size:12px;color:var(--color-text-tertiary);" id="progress-label"></span>
+  <button class="nav-btn" id="next-btn" onclick="go(1)">Next →</button>
+</div>
+
+</div>
+
+<script>
+const phases = [
+  {
+    label: "Phase 1 — Simulation environment",
+    weeks: "Weeks 1–2",
+    goal: "Get a tractor on screen, moving, with a dirt path rendered. Nothing smart yet — just a working physics sandbox.",
+    tasks: [
+      { tag: "py", label: "Set up Pygame window + game loop (60 fps)" },
+      { tag: "py", label: "Define the dirt path as a list of (x, y) waypoints; render it as a textured strip" },
+      { tag: "py", label: "Implement Ackermann steering kinematics — tractor moves with realistic turning radius" },
+      { tag: "py", label: "Draw tractor sprite with heading indicator" },
+      { tag: "py", label: "Implement cross-track error calculation (distance from tractor to nearest path segment)" },
+      { tag: "doc", label: "Write unit tests for kinematics (assert turning radius, heading update)" }
+    ],
+    deliverable: "Runnable Pygame window: tractor can be manually keyboard-driven along a visible dirt path. Ackermann steering is physically constrained — no teleporting.",
+    tagMap: { py:"Python", doc:"Test" }
+  },
+  {
+    label: "Phase 2 — Pure Pursuit expert driver",
+    weeks: "Weeks 3–4",
+    goal: "Replace keyboard control with an algorithmic expert that drives the path perfectly and logs every state/action pair.",
+    tasks: [
+      { tag: "py", label: "Implement Pure Pursuit: find lookahead point L metres ahead on path" },
+      { tag: "py", label: "Compute ideal steering angle from current position + heading to lookahead" },
+      { tag: "py", label: "Run expert in a tight loop; log (x, y, heading, cte, speed) → (steering, throttle) to CSV" },
+      { tag: "py", label: "Implement noise injection: every N steps, displace tractor 20–60 px off-centre" },
+      { tag: "py", label: "Log recovery data (sharp correction angles back to path)" },
+      { tag: "doc", label: "Visualise logged path overlay vs ideal path to sanity-check data quality" }
+    ],
+    deliverable: "A clean CSV dataset of ~50k state/action rows — half normal driving, half recovery from displacement. This is the imitation learning corpus.",
+    tagMap: { py:"Python", doc:"Vis" }
+  },
+  {
+    label: "Phase 3 — Imitation learning baseline",
+    weeks: "Week 5",
+    goal: "Train a fast supervised model on the expert dataset to get a 'good enough' starting policy before RL begins.",
+    tasks: [
+      { tag: "ml", label: "Define state vector: [cte, heading_error, speed, lookahead_angle]" },
+      { tag: "ml", label: "Build simple MLP in PyTorch (3 hidden layers, tanh activations)" },
+      { tag: "ml", label: "Train on expert CSV with MSE loss; validate on held-out laps" },
+      { tag: "ml", label: "Plug trained model into Pygame loop as the active policy" },
+      { tag: "doc", label: "Plot training curve, cross-track error histogram on validation set" }
+    ],
+    deliverable: "A `.pt` model file. When loaded, the tractor follows the path acceptably — not perfect, but stable. This prevents RL from starting from total randomness.",
+    tagMap: { ml:"PyTorch", doc:"Report" }
+  },
+  {
+    label: "Phase 4 — Reinforcement learning (SAC / DDPG)",
+    weeks: "Weeks 6–8",
+    goal: "Fine-tune the imitation policy using continuous RL so the tractor learns smooth, optimal steering beyond what the expert demonstrated.",
+    tasks: [
+      { tag: "ml", label: "Wrap Pygame sim as a Gymnasium Env (step, reset, render)" },
+      { tag: "ml", label: "Define reward: +1/step on path, −|cte| penalty, −|Δsteering| smoothness penalty, −10 if departure > threshold" },
+      { tag: "ml", label: "Initialise SAC (or DDPG) actor with weights from IL model" },
+      { tag: "ml", label: "Run training loop: 200k environment steps, log reward + CTE per episode" },
+      { tag: "ml", label: "Tune: replay buffer size, entropy coeff (SAC), noise (DDPG)" },
+      { tag: "doc", label: "Plot learning curve; compare SAC vs DDPG episode reward" }
+    ],
+    deliverable: "Final RL policy checkpoint. Tractor drives the full path with low CTE and smooth steering. Training curves included in report.",
+    tagMap: { ml:"PyTorch / Gym", doc:"Report" }
+  },
+  {
+    label: "Phase 5 — Vision cone & safety stop",
+    weeks: "Week 9",
+    goal: "Add the obstacle detection layer so the tractor stops autonomously when something enters its field of view.",
+    tasks: [
+      { tag: "py", label: "Render a triangular vision cone in front of the tractor (configurable angle + depth)" },
+      { tag: "py", label: "Spawn random obstacle sprites (logs, rocks) on the path at runtime" },
+      { tag: "py", label: "Pixel-cluster detection: check if any obstacle pixel falls within cone bounding poly" },
+      { tag: "py", label: "On detection: set tractor state = STOPPED, flash UI alert, freeze RL policy output" },
+      { tag: "py", label: "Add manual resume: pressing R key clears the stop (pre-Flutter test hook)" }
+    ],
+    deliverable: "Pygame simulation with live obstacle spawning. Tractor reliably stops within 1–2 frames of an obstacle entering the cone. Demonstrated in a screen recording.",
+    tagMap: { py:"Python" }
+  },
+  {
+    label: "Phase 6 — Flutter teleoperation app",
+    weeks: "Weeks 10–11",
+    goal: "Build the farmer's mobile UI: receive the obstacle alert, display it, and send a command back to the simulation.",
+    tasks: [
+      { tag: "fl", label: "Set up Flutter project; add HTTP + websocket packages" },
+      { tag: "py", label: "Add a lightweight FastAPI server to Pygame sim — exposes /stop and /command endpoints" },
+      { tag: "fl", label: "Flutter polls /stop; on obstacle event, push 'Obstacle detected' alert screen" },
+      { tag: "fl", label: "Alert screen shows three buttons: Nudge Left, Nudge Right, Wait" },
+      { tag: "py", label: "Simulation receives command from /command endpoint; executes nudge or wait, resumes RL" },
+      { tag: "fl", label: "Log each override (timestamp, command, position) to JSON file for fine-tuning" }
+    ],
+    deliverable: "Flutter app runnable on Android emulator or phone. Full loop: obstacle → stop → phone alert → farmer taps Nudge Left → tractor moves and resumes.",
+    tagMap: { fl:"Flutter", py:"Python" }
+  },
+  {
+    label: "Phase 7 — Fine-tuning & report",
+    weeks: "Weeks 12–13",
+    goal: "Close the human-in-the-loop cycle, polish the simulation, and write up.",
+    tasks: [
+      { tag: "ml", label: "Replay override log as additional training data; fine-tune RL policy on recovery manoeuvres" },
+      { tag: "ml", label: "Evaluate before vs after fine-tuning: CTE, smoothness, obstacle recovery time" },
+      { tag: "doc", label: "Record full demo video: normal driving → obstacle → Flutter override → resume" },
+      { tag: "doc", label: "Write report sections: architecture, data pipeline, RL training, safety system, results" },
+      { tag: "doc", label: "Prepare GitHub repo: README, requirements.txt, trained model checkpoint, dataset sample" }
+    ],
+    deliverable: "Submitted project: code repo + report PDF + demo video. All four ML concepts demonstrated: Ackermann physics, Pure Pursuit IL, SAC/DDPG RL, human-in-the-loop CV.",
+    tagMap: { ml:"PyTorch", doc:"Report", fl:"Flutter" }
+  }
+];
+
+let cur = 0;
+
+function tagClass(t) {
+  return { py:'tag-py', ml:'tag-ml', fl:'tag-fl', doc:'tag-doc' }[t] || 'tag-doc';
+}
+function tagLabel(t, map) {
+  return map[t] || t;
+}
+
+function render() {
+  const p = phases[cur];
+  const dotRow = document.getElementById('dot-row');
+  dotRow.innerHTML = phases.map((ph, i) => {
+    const cls = i < cur ? 'done' : i === cur ? 'active' : '';
+    return `<div style="display:flex;align-items:center;gap:6px;cursor:pointer;" onclick="jump(${i})">
+      <div class="phase-dot ${cls}"></div>
+      <span style="font-size:11px;color:var(--color-text-tertiary);">P${i+1}</span>
+    </div>` + (i < phases.length-1 ? `<div style="flex:1;height:1px;background:var(--color-border-tertiary);min-width:8px;"></div>` : '');
+  }).join('');
+
+  const tasksHtml = p.tasks.map((t,i) => `
+    <div class="task-row">
+      <div class="task-num" style="background:var(--color-background-secondary);color:var(--color-text-secondary);">${i+1}</div>
+      <div><span class="tag ${tagClass(t.tag)}">${tagLabel(t.tag, p.tagMap)}</span>${t.label}</div>
+    </div>`).join('');
+
+  document.getElementById('phase-card').innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px;flex-wrap:wrap;gap:4px;">
+      <span style="font-size:15px;font-weight:500;color:var(--color-text-primary);">${p.label}</span>
+      <span style="font-size:12px;color:var(--color-text-tertiary);padding:2px 8px;background:var(--color-background-secondary);border-radius:4px;">${p.weeks}</span>
+    </div>
+    <p style="font-size:13px;color:var(--color-text-secondary);margin:0 0 14px;line-height:1.6;">${p.goal}</p>
+    <div>${tasksHtml}</div>
+    <div class="deliverable-box"><strong style="color:var(--color-text-primary);font-weight:500;">Deliverable — </strong>${p.deliverable}</div>`;
+
+  document.getElementById('progress-label').textContent = `Phase ${cur+1} of ${phases.length}`;
+  document.getElementById('prev-btn').disabled = cur === 0;
+  document.getElementById('next-btn').disabled = cur === phases.length - 1;
+}
+
+function go(d) { cur = Math.max(0, Math.min(phases.length-1, cur+d)); render(); }
+function jump(i) { cur = i; render(); }
+render();
+</script>
