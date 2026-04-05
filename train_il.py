@@ -247,7 +247,7 @@ def train(model: SteeringMLP,
                 break
 
     # Restore best weights
-    model.load_state_dict(torch.load("_best_weights.pt", map_location=device))
+    model.load_state_dict(torch.load("_best_weights.pt", map_location=device, weights_only=True))
     os.remove("_best_weights.pt")
     return train_losses, val_losses
 

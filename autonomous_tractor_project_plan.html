@@ -97,42 +97,28 @@ const phases = [
     goal: "Add the obstacle detection layer so the tractor stops autonomously when something enters its field of view.",
     tasks: [
       { tag: "py", label: "Render a triangular vision cone in front of the tractor (configurable angle + depth)" },
-      { tag: "py", label: "Spawn random obstacle sprites (logs, rocks) on the path at runtime" },
-      { tag: "py", label: "Pixel-cluster detection: check if any obstacle pixel falls within cone bounding poly" },
-      { tag: "py", label: "On detection: set tractor state = STOPPED, flash UI alert, freeze RL policy output" },
-      { tag: "py", label: "Add manual resume: pressing R key clears the stop (pre-Flutter test hook)" }
+      { tag: "py", label: "Spawn random obstacle sprites (logs, rocks) ahead of the tractor on a randomised 1–5 s timer" },
+      { tag: "py", label: "Point-in-triangle detection: check if any obstacle centre falls within the cone polygon" },
+      { tag: "py", label: "On detection: set tractor state = STOPPED, flash red alert banner, freeze SAC policy output" },
+      { tag: "py", label: "R key clears the obstacle and resumes; O key manually spawns an obstacle for testing" }
     ],
-    deliverable: "Pygame simulation with live obstacle spawning. Tractor reliably stops within 1–2 frames of an obstacle entering the cone. Demonstrated in a screen recording.",
+    deliverable: "Pygame simulation with live obstacle spawning. Tractor reliably stops within 1–2 frames of an obstacle entering the cone. HUD shows obstacle count, stop count, and current state.",
     tagMap: { py:"Python" }
   },
   {
-    label: "Phase 6 — Flutter teleoperation app",
-    weeks: "Weeks 10–11",
-    goal: "Build the farmer's mobile UI: receive the obstacle alert, display it, and send a command back to the simulation.",
+    label: "Phase 6 — Autonomous obstacle avoidance",
+    weeks: "Week 10",
+    goal: "Replace the hard-stop with an intelligent nudge system: the tractor checks if it can squeeze past the obstacle by moving left or right within the road boundary, executes the safest manoeuvre, and only hard-stops when neither side is passable.",
     tasks: [
-      { tag: "fl", label: "Set up Flutter project; add HTTP + websocket packages" },
-      { tag: "py", label: "Add a lightweight FastAPI server to Pygame sim — exposes /stop and /command endpoints" },
-      { tag: "fl", label: "Flutter polls /stop; on obstacle event, push 'Obstacle detected' alert screen" },
-      { tag: "fl", label: "Alert screen shows three buttons: Nudge Left, Nudge Right, Wait" },
-      { tag: "py", label: "Simulation receives command from /command endpoint; executes nudge or wait, resumes RL" },
-      { tag: "fl", label: "Log each override (timestamp, command, position) to JSON file for fine-tuning" }
+      { tag: "py", label: "On obstacle detection, probe ±NUDGE_DIST px perpendicular to path tangent on both sides" },
+      { tag: "py", label: "Clearance check: accept a side only if the probe point stays within DIRT_HALF_W of the centre-line" },
+      { tag: "py", label: "Execute nudge: shift tractor laterally and pass lateral_offset into Pure Pursuit so it tracks the offset line (reuses Phase 2 offset-lap logic)" },
+      { tag: "py", label: "Return-to-centre: once obstacle clears the cone, smoothly ramp lateral_offset back to 0 over RETURN_FRAMES frames" },
+      { tag: "py", label: "Hard-stop with 'CANNOT PASS — PATH TOO NARROW' banner when both sides fail the clearance check" },
+      { tag: "doc", label: "Log each event to reports/phase6_nudges.csv: direction chosen, clearance values, nudge success, duration" }
     ],
-    deliverable: "Flutter app runnable on Android emulator or phone. Full loop: obstacle → stop → phone alert → farmer taps Nudge Left → tractor moves and resumes.",
-    tagMap: { fl:"Flutter", py:"Python" }
-  },
-  {
-    label: "Phase 7 — Fine-tuning & report",
-    weeks: "Weeks 12–13",
-    goal: "Close the human-in-the-loop cycle, polish the simulation, and write up.",
-    tasks: [
-      { tag: "ml", label: "Replay override log as additional training data; fine-tune RL policy on recovery manoeuvres" },
-      { tag: "ml", label: "Evaluate before vs after fine-tuning: CTE, smoothness, obstacle recovery time" },
-      { tag: "doc", label: "Record full demo video: normal driving → obstacle → Flutter override → resume" },
-      { tag: "doc", label: "Write report sections: architecture, data pipeline, RL training, safety system, results" },
-      { tag: "doc", label: "Prepare GitHub repo: README, requirements.txt, trained model checkpoint, dataset sample" }
-    ],
-    deliverable: "Submitted project: code repo + report PDF + demo video. All four ML concepts demonstrated: Ackermann physics, Pure Pursuit IL, SAC/DDPG RL, human-in-the-loop CV.",
-    tagMap: { ml:"PyTorch", doc:"Report", fl:"Flutter" }
+    deliverable: "Simulation that autonomously avoids obstacles by nudging left or right when space permits, and displays a clear failure banner when the path is genuinely blocked. Nudge events logged to CSV for Phase 7 fine-tuning.",
+    tagMap: { py:"Python", doc:"CSV" }
   }
 ];
 

@@ -46,7 +46,17 @@ class Renderer:
 
     def draw_frame(self, path: Path, tractor: Tractor,
                    cte: float, arrived: bool = False,
-                   report_path: str = "") -> None:
+                   report_path: str = "",
+                   cone_geom=None,
+                   obstacle_mgr=None,
+                   detected=None,
+                   stopped: bool = False) -> None:
+        """
+        cone_geom    : ConeGeometry | None   — vision cone triangle
+        obstacle_mgr : ObstacleManager | None
+        detected     : list[Obstacle] | None  — obstacles currently in cone
+        stopped      : bool                   — show hard-stop banner
+        """
         wps = path.waypoints
         W, H = self.surf.get_size()
 
@@ -72,17 +82,31 @@ class Renderer:
         # 5. Markers
         self._draw_markers(wps)
 
-        # 6. Tractor
+        # 6a. Vision cone (drawn behind tractor)
+        if cone_geom is not None:
+            self._draw_vision_cone(cone_geom, bool(detected))
+
+        # 6b. Obstacles (drawn on dirt, behind tractor)
+        if obstacle_mgr is not None:
+            obstacle_mgr.draw_all(self.surf)
+            if detected:
+                obstacle_mgr.draw_detected(self.surf, detected)
+
+        # 7. Tractor
         tractor.draw(self.surf)
 
-        # 7. HUD
+        # 8. HUD
         self._draw_hud(tractor, cte)
 
-        # 8. Arrival banner
+        # 9. Arrival banner
         if arrived:
             self._draw_arrival_banner(W, H, report_path)
 
-        # 9. Controls hint
+        # 10. Hard-stop alert
+        if stopped:
+            self._draw_stop_alert(W, H)
+
+        # 11. Controls hint
         hint = self.font_lbl.render(
             "W/↑ fwd   S/↓ rev   A/← left   D/→ right   R restart   ESC quit",
             True, (155, 155, 155))
@@ -145,6 +169,59 @@ class Renderer:
             self.hud_surf.blit(self.font_hud.render(text, True, color),
                                (4, 6 + i * 19))
         self.surf.blit(self.hud_surf, (10, 10))
+
+    def _draw_vision_cone(self, geom, alert: bool) -> None:
+        """Draw the triangular vision cone with a semi-transparent fill."""
+        poly = [(int(p[0]), int(p[1])) for p in geom.polygon]
+
+        # Transparent fill — green normally, red on alert
+        cone_surf = pygame.Surface(self.surf.get_size(), pygame.SRCALPHA)
+        fill_col  = (255, 60, 60, 55) if alert else (80, 220, 120, 40)
+        pygame.draw.polygon(cone_surf, fill_col, poly)
+        self.surf.blit(cone_surf, (0, 0))
+
+        # Outline
+        edge_col = (220, 60, 60) if alert else (80, 220, 120)
+        pygame.draw.polygon(self.surf, edge_col, poly, 1)
+
+    def _draw_stop_alert(self, W: int, H: int) -> None:
+        """Flashing red banner shown when the tractor has performed a hard stop."""
+        overlay = pygame.Surface((W, 80), pygame.SRCALPHA)
+        overlay.fill((180, 0, 0, 200))
+        self.surf.blit(overlay, (0, H // 2 - 40))
+
+        title = self.font_arr.render("OBSTACLE DETECTED — HARD STOP", True, (255, 255, 255))
+        self.surf.blit(title, (W // 2 - title.get_width() // 2, H // 2 - 30))
+
+        sub = self.font_hud.render(
+            "Press  R  to clear obstacle and resume  |  ESC quit",
+            True, (220, 180, 180))
+        self.surf.blit(sub, (W // 2 - sub.get_width() // 2, H // 2 + 10))
+
+    def draw_nudge_banner(self, direction: str, offset_px: float) -> None:
+        """Amber info strip shown while the tractor is nudging around an obstacle."""
+        W, H = self.surf.get_size()
+        overlay = pygame.Surface((W, 44), pygame.SRCALPHA)
+        overlay.fill((160, 100, 0, 200))
+        self.surf.blit(overlay, (0, H // 2 - 22))
+        arrow = "◄ LEFT" if direction == "left" else "RIGHT ►"
+        msg   = self.font_hud.render(
+            f"NUDGING {arrow}  |  offset {offset_px:+.1f} px  |  returning to path after clear",
+            True, (255, 220, 120))
+        self.surf.blit(msg, (W // 2 - msg.get_width() // 2, H // 2 - 9))
+
+    def draw_cannot_pass_banner(self) -> None:
+        """Red banner shown when both sides are blocked and a hard stop is forced."""
+        W, H = self.surf.get_size()
+        overlay = pygame.Surface((W, 90), pygame.SRCALPHA)
+        overlay.fill((160, 0, 0, 210))
+        self.surf.blit(overlay, (0, H // 2 - 45))
+        title = self.font_arr.render("CANNOT PASS — PATH TOO NARROW", True, (255, 255, 255))
+        self.surf.blit(title, (W // 2 - title.get_width() // 2, H // 2 - 36))
+        sub = self.font_hud.render(
+            "Both sides blocked  |  Press R to remove obstacle and resume",
+            True, (220, 160, 160))
+        self.surf.blit(sub, (W // 2 - sub.get_width() // 2, H // 2 + 8))
 
     def _draw_arrival_banner(self, W: int, H: int, report_path: str) -> None:
         # Dark overlay strip

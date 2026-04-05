@@ -1,2 +1,12 @@
+# ── Simulation (Phase 1–3) ─────────────────────────────────────────
 pygame>=2.5.0
 numpy>=1.24.0
+
+# ── Machine learning (Phase 3–4) ──────────────────────────────────
+torch>=2.1.0
+pandas>=2.0.0
+matplotlib>=3.7.0
+
+# ── Reinforcement learning (Phase 4) ──────────────────────────────
+gymnasium>=0.29.0
+stable-baselines3>=2.2.0

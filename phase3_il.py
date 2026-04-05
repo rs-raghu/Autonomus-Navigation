@@ -99,7 +99,7 @@ class ILPolicy:
                 f"Model checkpoint not found: '{checkpoint_path}'\n"
                 f"Run  python train_il.py  first."
             )
-        ckpt = torch.load(checkpoint_path, map_location="cpu")
+        ckpt = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
 
         self.model = SteeringMLP(in_dim=len(FEATURE_COLS))
         self.model.load_state_dict(ckpt["model_state"])
